@@ -13,7 +13,7 @@ class BigQuery
     )
 
     @asserter = Google::APIClient::JWTAsserter.new(
-      opts['service_email'], 
+      opts['service_email'],
       "https://www.googleapis.com/auth/bigquery",
       key
     )
@@ -26,6 +26,7 @@ class BigQuery
     @dataset = opts['dataset']
   end
 
+  # https://developers.google.com/bigquery/docs/queries#syncqueries
   def query(q)
     res = api({
       :api_method => @bq.jobs.query,
@@ -33,12 +34,37 @@ class BigQuery
     })
 
     if res.has_key? "errors"
-      raise BigQueryError, "BigQuery has returned an error :: #{res['errors'].inspect}" 
+      raise BigQueryError, "BigQuery has returned an error :: #{res['errors'].inspect}"
     else
       res
     end
   end
 
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying
+  # https://developers.google.com/bigquery/docs/queries#asyncqueries
+  def asynchronous_query(q, opts = {})
+    opts = {
+      "query" => q,
+      "priority" => "INTERACTIVE",
+    }.merge(opts)
+
+    api({
+      :api_method => @bq.jobs.query,
+      :body_object => {
+        "configuration" => {
+          "query" => opts
+        }
+      }
+    })
+  end
+
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying
+  # https://developers.google.com/bigquery/docs/queries#batchqueries
+  def asynchronous_batch_query(q, opts = {})
+    asynchronous_query(q, opts.merge("priority" => "BATCH"))
+  end
+
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying#importing
   def load(opts)
     api({
       :api_method => @bq.jobs.insert,
@@ -50,25 +76,31 @@ class BigQuery
     })
   end
 
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs/get
   def job(id, opts = {})
+    # Querying a nil ID, will make BigQuery list all jobs
+    raise ArgumentError, 'Cannot get Job details with a nil id' if id == nil
+
     opts['jobId'] = id
 
-    api({ 
+    api({
       :api_method => @bq.jobs.get,
       :parameters => opts
     })
   end
 
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs/list
   def jobs(opts = {})
-    api({ 
+    api({
       :api_method => @bq.jobs.list,
       :parameters => opts
     })
   end
 
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs/getQueryResults
   def get_query_results(jobId, opts = {})
     opts['jobId'] = jobId
-    api({ 
+    api({
       :api_method => @bq.jobs.get_query_results,
       :parameters => opts
     })
