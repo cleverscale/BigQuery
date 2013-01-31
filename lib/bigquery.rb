@@ -28,16 +28,17 @@ class BigQuery
 
   # https://developers.google.com/bigquery/docs/queries#syncqueries
   def query(q)
-    res = api({
+    api({
       :api_method => @bq.jobs.query,
       :body_object => { "query" => q, 'timeoutMs' => 90 * 1000}
     })
+  end
 
-    if res.has_key? "errors"
-      raise BigQueryError, "BigQuery has returned an error :: #{res['errors'].inspect}"
-    else
-      res
-    end
+  # https://developers.google.com/bigquery/docs/queries#syncqueries
+  def query!(*args)
+    res = query(*args)
+    raise SynchronousQueryError.new(res) if res.has_key? "error"
+    res
   end
 
   # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying
@@ -59,9 +60,25 @@ class BigQuery
   end
 
   # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying
+  # https://developers.google.com/bigquery/docs/queries#asyncqueries
+  def asynchronous_query!(*args)
+    asynchronous_query(*args)
+    raise_if_job_error(res)
+    res
+  end
+
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying
   # https://developers.google.com/bigquery/docs/queries#batchqueries
   def asynchronous_batch_query(q, opts = {})
     asynchronous_query(q, opts.merge("priority" => "BATCH"))
+  end
+
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying
+  # https://developers.google.com/bigquery/docs/queries#batchqueries
+  def asynchronous_batch_query!(*args)
+    res = asynchronous_batch_query(*args)
+    raise_if_job_error(res)
+    res
   end
 
   # https://developers.google.com/bigquery/docs/reference/v2/jobs#querying#importing
@@ -76,6 +93,13 @@ class BigQuery
     })
   end
 
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs#importing
+  def load!(*args)
+    res = load(*args)
+    raise_if_job_error(res)
+    res
+  end
+
   # https://developers.google.com/bigquery/docs/reference/v2/jobs/get
   def job(id, opts = {})
     # Querying a nil ID, will make BigQuery list all jobs
@@ -87,6 +111,13 @@ class BigQuery
       :api_method => @bq.jobs.get,
       :parameters => opts
     })
+  end
+
+  # https://developers.google.com/bigquery/docs/reference/v2/jobs/get
+  def job!(*args)
+    res = job(*args)
+    raise_if_job_error(res)
+    res
   end
 
   # https://developers.google.com/bigquery/docs/reference/v2/jobs/list
@@ -156,7 +187,30 @@ class BigQuery
     resp = @client.execute(opts)
     JSON.parse(resp.body)
   end
-end
 
-class BigQueryError < StandardError  
-end  
+  def raise_if_job_error(res)
+    if res['status']['errorResult']
+      raise JobError.new(res)
+    end
+  end
+
+  public
+
+  class Error < StandardError; end
+  class SynchronousQueryError < Error
+    attr_reader :code
+    def initialize(res)
+      super(res['error']['message'])
+      @code = res['error']['code']
+    end
+  end
+  class JobError < Error
+    attr_reader :reason, :errors
+    def initialize(res)
+      super(res['status']['errorResult']['message'])
+      @reason = res['status']['errorResult']['reason']
+      @errors = res['status']['errorResult']['errors']
+    end
+  end
+
+end
