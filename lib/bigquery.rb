@@ -213,4 +213,24 @@ class BigQuery
     end
   end
 
+  class Util
+    def self.pending?(job)
+      job['status']['state'] == 'PENDING'
+    end
+    def self.running?(job)
+      job['status']['state'] == 'RUNNING'
+    end
+    def self.done?(job)
+      job['status']['state'] == 'DONE'
+    end
+    def self.error?(job)
+      !!job['status']['errorResult']
+    end
+    def self.in_progress?(job)
+      !done?(job)
+    end
+    def self.success?(job)
+      done?(job) && !error?(job)
+    end
+  end
 end
